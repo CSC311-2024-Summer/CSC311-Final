@@ -196,7 +196,7 @@ def aggregate_previous_year_averages(df, row, column='official_finish', range=36
 
 
 if __name__ == '__main__':
-    data_dir = './data/2023 Result Charts'
+    data_dir = '../data/2023 Result Charts'
     output_csv = './data/output.csv'
 
     # TESTING
@@ -211,7 +211,7 @@ if __name__ == '__main__':
 
     # parse_all_files_results(data_dir, output_csv)
 
-    data_dir_pp = './data/2023 PPs'
+    data_dir_pp = '../data/2023 PPs'
     output_csv_pp = './data/pp_output_new.csv'
     # parse_all_files_pp(data_dir_pp, output_csv_pp)
 
@@ -231,6 +231,9 @@ if __name__ == '__main__':
     # df_clean.to_csv('./data/cleaned_output_pp_new.csv', index=False)
 
     # round avg official finish time to nearest 0.5
-    df = pd.read_csv('./data/cleaned_output_pp_new.csv')
-    df['avg_official_finish'] = df['avg_official_finish'].apply(lambda x: round(x * 2) / 2)
-    df.to_csv('./data/pp_output.csv', index=False)
+    df = pd.read_csv('../data/cleaned_output_pp_new.csv')
+    df['avg_official_finish'] = df['avg_official_finish'].apply(lambda x: round(x))
+    df['equipment'] = df['equipment'].str.extract(r'Value: (.*)')
+    df['equipment'] = df['equipment'].fillna('N/A')
+    df['age'] = df['age'].round(2)
+    df.to_csv('../data/output_pp.csv', index=False)
