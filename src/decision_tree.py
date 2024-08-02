@@ -67,7 +67,7 @@ def vectorize_result_df(df, size):
         flag = True
         for column in columns:
             if isinstance(row[column], list):
-                row_vector.extend(row[column])
+                row_vector.extend(row[cox`lumn])
             else:
                 try:
                     row_vector.append(float(row[column]))
