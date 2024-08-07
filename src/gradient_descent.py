@@ -43,6 +43,41 @@ def compute_gradients(alpha, beta, s, r, t, lambda_reg):
     return grad_alpha, grad_beta
 
 
+def numerical_gradient(func, param, epsilon=1e-5):
+    num_grad = np.zeros_like(param)
+    perturb = np.zeros_like(param)
+
+    for i in range(len(param)):
+        perturb[i] = epsilon
+        loss_plus = func(param + perturb)
+        loss_minus = func(param - perturb)
+        num_grad[i] = (loss_plus - loss_minus) / (2 * epsilon)
+        perturb[i] = 0  # Reset perturbation
+
+    return num_grad
+
+
+def gradient_checking(alpha, beta, s, r, t, lambda_reg, epsilon=1e-5):
+    func_alpha = lambda a: compute_loss(a, beta, s, r, t) + 0.5 * lambda_reg * np.sum(a ** 2)
+    func_beta = lambda b: compute_loss(alpha, b, s, r, t) + 0.5 * lambda_reg * np.sum(b ** 2)
+
+    grad_alpha, grad_beta = compute_gradients(alpha, beta, s, r, t, lambda_reg)
+    num_grad_alpha = numerical_gradient(func_alpha, alpha, epsilon)
+    num_grad_beta = numerical_gradient(func_beta, beta, epsilon)
+
+    # Compare gradients
+    diff_alpha = np.linalg.norm(grad_alpha - num_grad_alpha) / np.linalg.norm(grad_alpha + num_grad_alpha)
+    diff_beta = np.linalg.norm(grad_beta - num_grad_beta) / np.linalg.norm(grad_beta + num_grad_beta)
+
+    if diff_alpha > 0.001 or diff_beta > 0.001:
+        print('Warning: Large gradient difference')
+        raise ValueError
+    print(f"Gradient Check - Alpha difference: {diff_alpha}")
+    print(f"Gradient Check - Beta difference: {diff_beta}")
+
+    return diff_alpha, diff_beta
+
+
 def gradient_descent(alpha, beta, s, r, t, learning_rate, lambda_reg, grad_clip_threshold, num_iterations):
     for iteration in range(num_iterations):
         grad_alpha, grad_beta = compute_gradients(alpha, beta, s, r, t, lambda_reg)
@@ -59,6 +94,7 @@ def gradient_descent(alpha, beta, s, r, t, learning_rate, lambda_reg, grad_clip_
         loss = compute_loss(alpha, beta, s, r, t)
         if iteration % 10 == 0:
             print(f"Iteration {iteration}: Loss = {loss}")
+            gradient_checking(alpha, beta, s, r, t, lambda_reg)
         # print(f"Gradient alpha = {grad_alpha}, Gradient beta = {grad_beta}")
 
     return alpha, beta
