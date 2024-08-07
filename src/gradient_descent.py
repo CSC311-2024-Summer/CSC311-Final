@@ -1,123 +1,122 @@
 import numpy as np
 
 
-def pairwise_loss(t_i, t_j, y_i, y_j):
-    return np.log(1 + np.exp(-(t_i - t_j) * (y_i - y_j)))
+def compute_y(alpha, beta, s, r):
+    return alpha * s + beta * r
 
 
-def grad_pairwise_alpha(t_i, t_j, y_i, y_j, s_i, s_j):
-    """
-    gradient of pairwise loss with respect to alpha
-    returns both gradients, w.r.t alpha_i and alpha_j respectively
-    """
-    exp_ij = np.exp(-(t_i - t_j) * (y_i - y_j))
-    return ((1 / (1 + exp_ij)) * (-(t_i - t_j)) * s_i).sum(), ((1 / (1 + exp_ij)) * (t_i - t_j) * s_j).sum()
+def compute_loss(alpha, beta, s, r, t):
+    n = len(t)
+    loss = 0.0
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                y_i = compute_y(alpha[i], beta[i], s[i], r[i])
+                y_j = compute_y(alpha[j], beta[j], s[j], r[j])
+                loss += np.log(1 + np.exp(-(t[i] - t[j]) * (y_i - y_j)))
+    return loss
 
 
-def grad_pairwise_beta(t_i, t_j, y_i, y_j, r_i, r_j):
-    """
-    gradient of pairwise loss with respect to beta
-    returns both gradients, w.r.t beta_i and beta_j respectively
-    """
-    exp_term = np.exp(-(t_i - t_j) * (y_i - y_j))
-    return ((1 / (1 + exp_term)) * (-(t_i - t_j)) * r_i).sum(), ((1 / (1 + exp_term)) * (t_i - t_j) * r_j).sum()
-
-
-def compute_grad_pairwise(alpha, beta, S, R, T):
-    """
-    :param alpha:
-    :param beta:
-    :param S:
-    :param R:
-    :param T: the N by 1 column vector of the true labels
-    :return:
-    """
-    n = T.shape[0]
-    dL_dalpha = np.zeros_like(alpha)
-    dL_dbeta = np.zeros_like(beta)
+def compute_gradients(alpha, beta, s, r, t, lambda_reg):
+    n = len(t)
+    grad_alpha = np.zeros_like(alpha)
+    grad_beta = np.zeros_like(beta)
 
     for i in range(n):
         for j in range(n):
             if i != j:
-                y_i = alpha[i] * S[i] + beta[i] * R[i]
-                y_j = alpha[j] * S[j] + beta[j] * R[j]
+                y_i = compute_y(alpha[i], beta[i], s[i], r[i])
+                y_j = compute_y(alpha[j], beta[j], s[j], r[j])
 
-                exp_term = np.exp(-(T[i] - T[j]) * (y_i - y_j))
-                common_factor = 1 / (1 + exp_term) * (-(T[i] - T[j]))
+                exp_term = np.exp(-(t[i] - t[j]) * (y_i - y_j))
+                common_term = exp_term / (1 + exp_term)
 
-                dL_dalpha[i] += common_factor * S[i]
-                dL_dalpha[j] -= common_factor * S[j]
+                grad_alpha[i] += common_term * (-(t[i] - t[j])) * s[i]
+                grad_alpha[j] += common_term * (-(t[i] - t[j])) * (-s[j])
+                grad_beta[i] += common_term * (-(t[i] - t[j])) * r[i]
+                grad_beta[j] += common_term * (-(t[i] - t[j])) * (-r[j])
 
-                dL_dbeta[i] += common_factor * R[i]
-                dL_dbeta[j] -= common_factor * R[j]
+    # Apply regularization
+    grad_alpha += lambda_reg * alpha
+    grad_beta += lambda_reg * beta
 
-    return dL_dalpha, dL_dbeta
-
-
-def total_loss(alpha, beta, S, R, T):
-    n = T.shape[0]
-    total_loss = 0
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                y_i = alpha[i] * S[i] + beta[i] * R[i]
-                y_j = alpha[j] * S[j] + beta[j] * R[j]
-                total_loss += pairwise_loss(T[i], T[j], y_i, y_j)
-    return total_loss
+    return grad_alpha, grad_beta
 
 
-def gradient_descent(alpha, beta, S, R, T, learning_rate, iterations):
-    for _ in range(iterations):
-        dL_dalpha, dL_dbeta = compute_grad_pairwise(alpha, beta, S, R, T)
+def gradient_descent(alpha, beta, s, r, t, learning_rate, lambda_reg, grad_clip_threshold, num_iterations):
+    for iteration in range(num_iterations):
+        grad_alpha, grad_beta = compute_gradients(alpha, beta, s, r, t, lambda_reg)
+
+        # Gradient clipping
+        grad_alpha = np.clip(grad_alpha, -grad_clip_threshold, grad_clip_threshold)
+        grad_beta = np.clip(grad_beta, -grad_clip_threshold, grad_clip_threshold)
 
         # Update alpha and beta
-        alpha -= learning_rate * dL_dalpha
-        beta -= learning_rate * dL_dbeta
+        alpha -= learning_rate * grad_alpha
+        beta -= learning_rate * grad_beta
 
-        print(f"Iteration {_}: Loss = {total_loss(alpha, beta, S, R, T)}")
+        # Compute and print the loss
+        loss = compute_loss(alpha, beta, s, r, t)
+        if iteration % 10 == 0:
+            print(f"Iteration {iteration}: Loss = {loss}")
+        # print(f"Gradient alpha = {grad_alpha}, Gradient beta = {grad_beta}")
 
     return alpha, beta
 
 
-# Function to generate S from exp(f(x)) where f(x) is between 1 and 8
-def generate_S(n):
-    f_x = np.random.uniform(1, 8, size=n)
-    S = np.exp(f_x)
-    return S
+def get_s(d_bar):
+    return np.exp(-d_bar)
 
 
-# Function to generate R as the output of a regression model
-def generate_R(n):
-    # Simulate a regression model output
-    X = np.random.rand(n, 1)
-    true_coefficient = 3.5
-    noise = np.random.randn(n, 1) * 0.5
-    R = true_coefficient * X + noise
-    return R.flatten()
+def generate_s_j(num_horses):
+    d_bar = np.random.normal(num_horses / 2, num_horses / 4 - 0.5, size=num_horses)
+    print(d_bar)
+
+    # Apply exponential transformation
+    S_j = np.exp(-d_bar)
+
+    return S_j
 
 
-# Generate T as binary labels
-def generate_T(n):
-    return np.random.randint(0, 2, size=n)
+def generate_r_j(num_horses, mean=12, std=7):
+    r_j = np.random.normal(mean, std, size=num_horses)
+    M_r = np.mean(r_j)
+    sigma_r = np.std(r_j)
+    r_j_normalized = (r_j - M_r) / sigma_r
+
+    return r_j_normalized
+
+
+def generate_true_labels_ranking(num_horses):
+    # True labels are a permutation of {1, 2, ..., num_horses}
+    true_ranks = np.random.permutation(np.arange(1, num_horses + 1))
+    return true_ranks
+
+
+def generate_true_labels_regression(num_horses, mean=12, std=7):
+    # True labels are finish times in seconds, normally distributed
+    true_times = np.random.normal(mean, std, size=num_horses)
+    return true_times
 
 
 if __name__ == '__main__':
-    # test
-    n = 100
-    S = generate_S(n)
-    R = generate_R(n)
-    T = generate_T(n)
-    print("S:", S)
-    print("R:", R)
-    print("T:", T)
+    num_horses = 8
+    s = generate_s_j(num_horses)  # please call get_s(d_bar), with d_bar from your output
+    r = generate_r_j(num_horses)  # provide r (r = [r_1, ..., r_num_of_horses_in_race])
+    t = generate_true_labels_ranking(num_horses)  # provide t (I assumed this would be the true rankings for 1 race)
 
-    alpha = np.random.rand(n)
-    beta = np.random.rand(n)
+    alpha = np.random.rand(num_horses)
+    beta = np.random.rand(num_horses)
 
+    # lambda reg = regularization parameter
     learning_rate = 0.01
-    iterations = 1000
+    lambda_reg = 0.001
+    grad_clip_threshold = 1.0
+    num_iterations = 250
 
-    alpha, beta = gradient_descent(alpha, beta, S, R, T, learning_rate, iterations)
+    # doing the gradient descent
+    alpha, beta = gradient_descent(alpha, beta, s, r, t, learning_rate, lambda_reg, grad_clip_threshold,
+                                   num_iterations)
 
-    print("Alpha:", alpha)
-    print("Beta:", beta)
+    print("Final alpha:", alpha)
+    print("Final beta:", beta)
