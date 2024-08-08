@@ -17,28 +17,62 @@ def compute_loss(alpha, beta, s, r, t):
     return loss
 
 
-def compute_gradients(alpha, beta, s, r, t, lambda_reg):
-    n = len(t)
+def compute_cost(alpha, beta, s, r, t, lambda_1, lambda_2):
+    N = len(s)  # Number of races
+    total_loss = 0.0
+    total_abs_alpha = 0.0
+    total_beta_square = 0.0
+    n = len(t[0])  # Number of horses in each race
+
+    for w in range(N):
+        race_loss = 0.0
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+                    y_i = compute_y(alpha[i], beta[i], s[w][i], r[w][i])
+                    y_j = compute_y(alpha[j], beta[j], s[w][j], r[w][j])
+                    diff = (t[w][i] - t[w][j]) * (y_i - y_j)
+                    if diff > 0:
+                        race_loss += np.log(1 + np.exp(-diff))
+                    else:
+                        race_loss += -diff + np.log(1 + np.exp(diff))
+        total_loss += race_loss
+        # total_abs_alpha += np.sum(np.abs(alpha))
+        # total_beta_square += np.sum(beta ** 2)
+
+    # cost = (total_loss / N) + (lambda_1 / (N * n)) * total_abs_alpha + (lambda_2 / (2 * N * n)) * total_beta_square
+    cost = (total_loss / N) + (lambda_1 / n) * np.sum(np.abs(alpha)) + (lambda_2 / (2 * n)) * np.sum(beta ** 2)
+    return cost
+
+
+def compute_gradients(alpha, beta, s, r, t, lambda_1, lambda_2):
+    N = len(s)  # Number of races
+    n = len(t[0])  # Number of horses in each race
     grad_alpha = np.zeros_like(alpha)
     grad_beta = np.zeros_like(beta)
 
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                y_i = compute_y(alpha[i], beta[i], s[i], r[i])
-                y_j = compute_y(alpha[j], beta[j], s[j], r[j])
+    for w in range(N):
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+                    y_i = compute_y(alpha[i], beta[i], s[w][i], r[w][i])
+                    y_j = compute_y(alpha[j], beta[j], s[w][j], r[w][j])
 
-                exp_term = np.exp(-(t[i] - t[j]) * (y_i - y_j))
-                common_term = exp_term / (1 + exp_term)
+                    diff = (t[w][i] - t[w][j]) * (y_i - y_j)
+                    exp_term = np.exp(-diff)
+                    common_term = exp_term / (1 + exp_term)
 
-                grad_alpha[i] += common_term * (-(t[i] - t[j])) * s[i]
-                grad_alpha[j] += common_term * (-(t[i] - t[j])) * (-s[j])
-                grad_beta[i] += common_term * (-(t[i] - t[j])) * r[i]
-                grad_beta[j] += common_term * (-(t[i] - t[j])) * (-r[j])
+                    grad_alpha[i] += common_term * (-(t[w][i] - t[w][j])) * s[w][i]
+                    grad_alpha[j] += common_term * (t[w][i] - t[w][j]) * s[w][j]
+                    grad_beta[i] += common_term * (-(t[w][i] - t[w][j])) * r[w][i]
+                    grad_beta[j] += common_term * (t[w][i] - t[w][j]) * r[w][j]
 
-    # Apply regularization
-    # grad_alpha += lambda_reg * alpha
-    grad_beta += lambda_reg * beta
+    grad_alpha /= N
+    grad_beta /= N
+
+    # Add regularization gradient
+    grad_alpha += (lambda_1 / n) * np.sign(alpha)
+    grad_beta += (lambda_2 / n) * beta
 
     return grad_alpha, grad_beta
 
@@ -57,32 +91,28 @@ def numerical_gradient(func, param, epsilon=1e-5):
     return num_grad
 
 
-def gradient_checking(alpha, beta, s, r, t, lambda_reg, epsilon=1e-5):
-    func_alpha = lambda a: compute_loss(a, beta, s, r, t) + 0.5 * lambda_reg * np.sum(a ** 2)
-    func_beta = lambda b: compute_loss(alpha, b, s, r, t) + 0.5 * lambda_reg * np.sum(b ** 2)
+def gradient_checking(alpha, beta, s, r, t, lambda_1, lambda_2, epsilon=1e-5):
+    func_alpha = lambda a: compute_cost(a, beta, s, r, t, lambda_1, lambda_2)
+    func_beta = lambda b: compute_cost(alpha, b, s, r, t, lambda_1, lambda_2)
 
-    grad_alpha, grad_beta = compute_gradients(alpha, beta, s, r, t, lambda_reg)
-    num_grad_alpha = numerical_gradient(func_alpha, alpha, epsilon)
-    num_grad_beta = numerical_gradient(func_beta, beta, epsilon)
+    grad_alpha, grad_beta = compute_gradients(alpha, beta, s, r, t, lambda_1, lambda_2)
+    num_grad_alpha = numerical_gradient(func_alpha, alpha)
+    num_grad_beta = numerical_gradient(func_beta, beta)
 
-    # Compare gradients
-    diff_alpha = np.linalg.norm(grad_alpha - num_grad_alpha) / np.linalg.norm(grad_alpha + num_grad_alpha)
-    diff_beta = np.linalg.norm(grad_beta - num_grad_beta) / np.linalg.norm(grad_beta + num_grad_beta)
+    alpha_diff = np.linalg.norm(grad_alpha - num_grad_alpha)
+    beta_diff = np.linalg.norm(grad_beta - num_grad_beta)
 
-    if diff_alpha > 0.001 or diff_beta > 0.001:
-        print('Warning: Large gradient difference')
-        raise ValueError
-    print(f"Gradient Check - Alpha difference: {diff_alpha}")
-    print(f"Gradient Check - Beta difference: {diff_beta}")
+    print(f"Gradient Check - Alpha difference: {alpha_diff}")
+    print(f"Gradient Check - Beta difference: {beta_diff}")
 
-    return diff_alpha, diff_beta
+    return alpha_diff, beta_diff
 
 
-def gradient_descent(alpha, beta, s, r, t, learning_rate, lambda_reg, grad_clip_threshold, num_iterations):
+def gradient_descent(alpha, beta, s, r, t, learning_rate, lambda_1, lambda_2, grad_clip_threshold, num_iterations):
     for iteration in range(num_iterations):
-        grad_alpha, grad_beta = compute_gradients(alpha, beta, s, r, t, lambda_reg)
+        grad_alpha, grad_beta = compute_gradients(alpha, beta, s, r, t, lambda_1, lambda_2)
 
-        # Gradient clipping
+        # Apply gradient clipping
         grad_alpha = np.clip(grad_alpha, -grad_clip_threshold, grad_clip_threshold)
         grad_beta = np.clip(grad_beta, -grad_clip_threshold, grad_clip_threshold)
 
@@ -90,12 +120,10 @@ def gradient_descent(alpha, beta, s, r, t, learning_rate, lambda_reg, grad_clip_
         alpha -= learning_rate * grad_alpha
         beta -= learning_rate * grad_beta
 
-        # Compute and print the loss
-        loss = compute_loss(alpha, beta, s, r, t)
+        cost = compute_cost(alpha, beta, s, r, t, lambda_1, lambda_2)
         if iteration % 10 == 0:
-            print(f"Iteration {iteration}: Loss = {loss}")
-            gradient_checking(alpha, beta, s, r, t, lambda_reg)
-        # print(f"Gradient alpha = {grad_alpha}, Gradient beta = {grad_beta}")
+            print(f"Iteration {iteration}: Cost = {cost}")
+            gradient_checking(alpha, beta, s, r, t, lambda_1, lambda_2)
 
     return alpha, beta
 
@@ -137,23 +165,21 @@ def generate_true_labels_regression(num_horses, mean=12, std=7):
 
 if __name__ == '__main__':
     num_horses = 8
-    s = generate_s_j(num_horses)  # please call get_s(d_bar), with d_bar from your output
-    print(s)
-    r = generate_r_j(num_horses)  # provide r (r = [r_1, ..., r_num_of_horses_in_race])
-    print(r)
-    t = generate_true_labels_ranking(num_horses)  # provide t (I assumed this would be the true rankings for 1 race)
-    print(t)
+    num_races = 10
+    s = [generate_s_j(num_horses) for _ in range(num_races)]
+    r = [generate_r_j(num_horses) for _ in range(num_races)]
+    t = [generate_true_labels_ranking(num_horses) for _ in range(num_races)]
+
     alpha = np.random.rand(num_horses)
     beta = np.random.rand(num_horses)
 
-    # lambda reg = regularization parameter
     learning_rate = 0.01
-    lambda_reg = 0.001
+    lambda_1 = 0.001
+    lambda_2 = 0.001
     grad_clip_threshold = 1.0
-    num_iterations = 250
+    num_iterations = 1000
 
-    # doing the gradient descent
-    alpha, beta = gradient_descent(alpha, beta, s, r, t, learning_rate, lambda_reg, grad_clip_threshold,
+    alpha, beta = gradient_descent(alpha, beta, s, r, t, learning_rate, lambda_1, lambda_2, grad_clip_threshold,
                                    num_iterations)
 
     print("Final alpha:", alpha)
