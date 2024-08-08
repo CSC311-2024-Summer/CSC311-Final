@@ -37,7 +37,7 @@ def compute_gradients(alpha, beta, s, r, t, lambda_reg):
                 grad_beta[j] += common_term * (-(t[i] - t[j])) * (-r[j])
 
     # Apply regularization
-    grad_alpha += lambda_reg * alpha
+    # grad_alpha += lambda_reg * alpha
     grad_beta += lambda_reg * beta
 
     return grad_alpha, grad_beta
@@ -138,9 +138,11 @@ def generate_true_labels_regression(num_horses, mean=12, std=7):
 if __name__ == '__main__':
     num_horses = 8
     s = generate_s_j(num_horses)  # please call get_s(d_bar), with d_bar from your output
+    print(s)
     r = generate_r_j(num_horses)  # provide r (r = [r_1, ..., r_num_of_horses_in_race])
+    print(r)
     t = generate_true_labels_ranking(num_horses)  # provide t (I assumed this would be the true rankings for 1 race)
-
+    print(t)
     alpha = np.random.rand(num_horses)
     beta = np.random.rand(num_horses)
 
