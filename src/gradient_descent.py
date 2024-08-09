@@ -20,8 +20,6 @@ def compute_loss(alpha, beta, s, r, t):
 def compute_cost(alpha, beta, s, r, t, lambda_1, lambda_2):
     N = len(s)  # Number of races
     total_loss = 0.0
-    total_abs_alpha = 0.0
-    total_beta_square = 0.0
     n = len(t[0])  # Number of horses in each race
 
     for w in range(N):
@@ -37,11 +35,9 @@ def compute_cost(alpha, beta, s, r, t, lambda_1, lambda_2):
                     else:
                         race_loss += -diff + np.log(1 + np.exp(diff))
         total_loss += race_loss
-        # total_abs_alpha += np.sum(np.abs(alpha))
-        # total_beta_square += np.sum(beta ** 2)
 
-    # cost = (total_loss / N) + (lambda_1 / (N * n)) * total_abs_alpha + (lambda_2 / (2 * N * n)) * total_beta_square
-    cost = (total_loss / N) + (lambda_1 / n) * np.sum(np.abs(alpha)) + (lambda_2 / (2 * n)) * np.sum(beta ** 2)
+    # cost = (total_loss / N) + (lambda_1 / n) * np.sum(np.abs(alpha)) + (lambda_2 / (2 * n)) * np.sum(beta ** 2)
+    cost = (total_loss / N) + (lambda_1 / n) * np.sum(np.abs(alpha)) + (lambda_2 / n) * np.sum(np.abs(beta))
     return cost
 
 
@@ -72,7 +68,8 @@ def compute_gradients(alpha, beta, s, r, t, lambda_1, lambda_2):
 
     # Add regularization gradient
     grad_alpha += (lambda_1 / n) * np.sign(alpha)
-    grad_beta += (lambda_2 / n) * beta
+    # grad_beta += (lambda_2 / n) * beta
+    grad_beta += (lambda_2 / n) * np.sign(beta)
 
     return grad_alpha, grad_beta
 
