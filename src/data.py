@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 import csv
 import os
-from models import Racer, Race, Horse, PastPerformance
+from objects import Racer, Race, Horse, PastPerformance
 from datetime import datetime, timedelta
 
 

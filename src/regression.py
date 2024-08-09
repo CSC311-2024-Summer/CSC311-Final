@@ -12,14 +12,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, PolynomialFeatures
 
-
-
 MODEL_PATH = 'models/regression_model.pkl'
 matplotlib.use('Agg')
 
 REGRESSION_PARAM_GRID = {
     'poly__degree': [2],
-    'alpha': np.linspace(0.1, 5, 10) # Alphas from 0 to 5 with 0.25 increment
+    'alpha': np.linspace(0.1, 5, 10)  # Alphas from 0 to 5 with 0.25 increment
 }
 
 BEST_CONFIG = {'poly__degree': 2, 'alpha': 1.6}
@@ -37,12 +35,14 @@ def preprocess_column_for_encoding(df, column):
     df[column] = df[column].fillna('missing')
 
     return df
+
+
 def single_column_to_one_hot(df, column, should_fit=False, encoders_path=ENCODERS_PATH):
     df = preprocess_column_for_encoding(df, column)
     encoders = load_encoders(encoders_path)
     encoder = encoders.get(column, OneHotEncoder(sparse_output=False))
     # ignore OOV
-    encoder.handle_unknown ='ignore'
+    encoder.handle_unknown = 'ignore'
 
     if should_fit or column not in encoders:
         # print(f'Refitting Encoder for column: {column}')
@@ -71,8 +71,8 @@ def vectorize_date(df, column):
 
     return df
 
+
 def encode_month_cyclical(df, column):
-    # Encode cyclically
     df[column + '_sin'] = np.sin(2 * np.pi * df[column] / 12)
     df[column + '_cos'] = np.cos(2 * np.pi * df[column] / 12)
     return df
@@ -82,8 +82,10 @@ def get_pp_Y(df):
     y_vector = df['finish_time'].apply(float).values
     return y_vector
 
+
 def get_pp_X(df, should_save_encoders=False, encoders_path=ENCODERS_PATH):
-    one_hot_columns = ['sex', 'track_condition', 'weather', 'equip', 'meds', 'jockey_key', 'trainer_key', 'post_position', 'race_date_month', 'surface']
+    one_hot_columns = ['sex', 'track_condition', 'weather', 'equip', 'meds', 'jockey_key', 'trainer_key',
+                       'post_position', 'race_date_month', 'surface']
     date_columns = ['race_date']
 
     for column in date_columns:
@@ -93,7 +95,9 @@ def get_pp_X(df, should_save_encoders=False, encoders_path=ENCODERS_PATH):
         df, encoders = single_column_to_one_hot(df, column, should_save_encoders, encoders_path)
 
     final_matrix = []
-    columns = [col for col in df.columns if col not in ['race_comments', 'finish_time', 'reg_num', 'temperature', 'avg_official_finish', 'race_date', 'owner_key']]
+    columns = [col for col in df.columns if
+               col not in ['race_comments', 'finish_time', 'reg_num', 'temperature', 'avg_official_finish', 'race_date',
+                           'owner_key']]
     numerical_columns = ['dollar_odds', 'weight', 'distance', 'run_up_distance']
 
     for column in numerical_columns:
@@ -119,9 +123,11 @@ def get_pp_X(df, should_save_encoders=False, encoders_path=ENCODERS_PATH):
         save_encoders(encoders, encoders_path)
     return final_matrix
 
+
 def save_encoders(encoders, path=ENCODERS_PATH):
     print('Saved Encoders')
     joblib.dump(encoders, path)
+
 
 def load_encoders(path=ENCODERS_PATH):
     if os.path.exists(path):
@@ -129,18 +135,17 @@ def load_encoders(path=ENCODERS_PATH):
         return joblib.load(path)
     return {}
 
+
 def detect_large_differences():
     df = pd.read_csv('../data/output_pp_new.csv')
     X = get_pp_X(df)
-    # Calculate mean and standard deviation for each feature
+
     means = np.mean(X, axis=0)
     stds = np.std(X, axis=0)
 
-    # Find features with large differences (high standard deviation)
-    threshold = np.percentile(stds, 95)  # You can adjust this threshold
+    threshold = np.percentile(stds, 95)
     large_diff_indices = np.where(stds > threshold)[0]
 
-    # Map indices back to column names
     column_names = [col for col in df.columns if
                     col not in ['race_comments', 'finish_time', 'reg_num', 'temperature', 'avg_official_finish']]
     large_diff_columns = []
@@ -163,7 +168,8 @@ def get_training_data_split():
     X = get_pp_X(df, should_save_encoders=True)
     y = get_pp_Y(df)
     X_train_val, _, y_train_val, _ = train_test_split(X, y, test_size=0.2, random_state=42069, shuffle=True)
-    X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=0.25, random_state=42069, shuffle=True)
+    X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=0.25, random_state=42069,
+                                                      shuffle=True)
     return X_train, X_val, y_train, y_val
 
 
@@ -175,23 +181,16 @@ def get_test_set():
     return X_test, y_test
 
 
-
-
-
 def train_and_plot_regression_model():
     X_train, X_val, y_train, y_val = get_training_data_split()
     results = []
 
-
     X_train_sparse = csr_matrix(X_train)
     X_val_sparse = csr_matrix(X_val)
 
-
-
-    # Prepare to plot combined graphs
     plt.figure(figsize=(14, 7))
 
-    colors = ['b', 'g', 'r', 'c']  # Colors for different polynomial degrees
+    colors = ['b', 'g', 'r', 'c']
 
     for idx, degree in enumerate(REGRESSION_PARAM_GRID['poly__degree']):
         alphas = REGRESSION_PARAM_GRID['alpha']
@@ -215,14 +214,12 @@ def train_and_plot_regression_model():
             results.append((degree, alpha, val_mse, val_r2))
             print(f'Degree: {degree}, Alpha: {alpha:.4f}, MSE: {val_mse:.4f}, R²: {val_r2:.4f}')
 
-        # Plot MSE for the current polynomial degree
         plt.subplot(1, 2, 1)
         plt.plot(alphas, val_mses, marker='o', color=colors[idx], label=f'Degree {degree}')
         plt.xlabel('Alpha')
         plt.ylabel('Validation MSE')
         plt.title('MSE for Polynomial Degrees')
 
-        # Plot R² for the current polynomial degree
         plt.subplot(1, 2, 2)
         plt.plot(alphas, val_r2s, marker='o', color=colors[idx], label=f'Degree {degree}')
         plt.xlabel('Alpha')
@@ -237,7 +234,6 @@ def train_and_plot_regression_model():
     plt.savefig('combined_polynomial_degrees.png')
     plt.close()
 
-    # Get the best model based on MSE
     best_degree, best_alpha, best_mse, best_r2 = min(results, key=lambda x: x[2])
 
     best_model = Pipeline([
@@ -251,8 +247,9 @@ def train_and_plot_regression_model():
     print(f'Best Validation Mean Squared Error: {best_mse:.4f}')
     print(f'Best Validation R² Score: {best_r2:.4f}')
 
+
 def regression_best_param_test():
-    best_param = {'degree' : 2, 'alpha' : 1.73}
+    best_param = {'degree': 2, 'alpha': 1.73}
     X_train, _, y_train, _ = get_training_data_split()
     X_test, y_test = get_test_set()
     X_test_sparse = csr_matrix(X_test)
@@ -266,6 +263,7 @@ def regression_best_param_test():
     y_pred = best_model.predict(X_test_sparse)
     val_mse = mean_squared_error(y_pred, y_test)
     print(f'Test Mean Squared Error: {val_mse:.4f}')
+
 
 def visualize_data():
     df = pd.read_csv('../data/output_pp_new.csv')
@@ -298,25 +296,25 @@ def visualize_data():
     plt.savefig('boxplots.png')
     plt.close()
 
+
 def visulization_correlation():
     df = pd.read_csv('../data/output_pp_new.csv')
     get_pp_X(df)
-    non_cont_columns = ['sex', 'track_condition', 'weather', 'equip', 'meds', 'jockey_key', 'trainer_key', 'reg_num', 'race_date', 'race_comments']
+    non_cont_columns = ['sex', 'track_condition', 'weather', 'equip', 'meds', 'jockey_key', 'trainer_key', 'reg_num',
+                        'race_date', 'race_comments']
     df = df.drop(columns=non_cont_columns)
 
     # correlation analysis
     corr_matrix = df.corr()
 
-    # Filter the correlation matrix to only include finish_time
     finish_time_corr = corr_matrix[['finish_time']].sort_values(by='finish_time', ascending=False)
 
-    # plot the heatmap
-    plt.figure(figsize=(8, 10))  # Adjusted figure size
+    plt.figure(figsize=(8, 10))
     heatmap = sns.heatmap(finish_time_corr, annot=True, fmt=".2f", cmap='coolwarm', linewidths=0.5)
-    heatmap.set_xticklabels(heatmap.get_xticklabels(), rotation=45, ha='right')  # Rotate x-axis labels
-    heatmap.set_yticklabels(heatmap.get_yticklabels(), rotation=0)  # Keep y-axis labels horizontal
+    heatmap.set_xticklabels(heatmap.get_xticklabels(), rotation=45, ha='right')
+    heatmap.set_yticklabels(heatmap.get_yticklabels(), rotation=0)
     plt.title('Correlation with Finish Time', pad=20)
-    plt.tight_layout()  # Adjust layout to fit elements properly
+    plt.tight_layout()
     plt.savefig('correlation_with_finish_time.png')
     plt.close()
 
@@ -325,8 +323,10 @@ def run_inference(model, x):
     x_sparse = csr_matrix(x)
     return model.predict(x_sparse)
 
+
 def run_inference_on_race(model, x, r):
     pass
+
 
 def get_regression_model():
     if os.path.exists(MODEL_PATH):
@@ -347,4 +347,3 @@ def get_regression_model():
         joblib.dump(pipeline, MODEL_PATH)
 
     return pipeline
-

@@ -36,10 +36,12 @@ import torch.optim as optim
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
 
-REGRESSION_COLUMN_NAMES = ['sex', 'age', 'num_of_racers', 'race_date', 'run_up_distance', 'track_condition', 'distance', 'weather', 'post_position', 'equip', 'jockey_key', 'weight', 'meds', 'dollar_odds', 'trainer_key', 'surface']
-
+REGRESSION_COLUMN_NAMES = ['sex', 'age', 'num_of_racers', 'race_date', 'run_up_distance', 'track_condition', 'distance',
+                           'weather', 'post_position', 'equip', 'jockey_key', 'weight', 'meds', 'dollar_odds',
+                           'trainer_key', 'surface']
 
 random.seed(42069)
+
 
 def build_racer_columns(size):
     # values we want to extract
@@ -82,7 +84,6 @@ def extract_racer_data(df, grouped_columns):
     return extracted_data
 
 
-
 def get_datasets_from_df(df, size):
     """
     parses results dataset for both regression model and decision tree
@@ -94,11 +95,12 @@ def get_datasets_from_df(df, size):
     regression_columns = build_racer_columns(size)
     regression_data = extract_racer_data(df, regression_columns)
     # convert to df for regression model
-    regression_dfs = [pd.DataFrame(regression_data[i], columns=REGRESSION_COLUMN_NAMES) for i in range(len(regression_data))]
+    regression_dfs = [pd.DataFrame(regression_data[i], columns=REGRESSION_COLUMN_NAMES) for i in
+                      range(len(regression_data))]
     # build dataset
     regression_data = [regression.get_pp_X(df, should_save_encoders=False) for df in regression_dfs]
     decision_tree_data, target_labels, static_labels = decision_tree.get_vectorized_df_of_size(df, size)
-    # # Process racer-specific columns
+    # # Process racer-specific columns (not needed)
     # for group in grouped_racer_columns:
     #     df = process_label_columns(df, [col for col in group if any(label in col for label in racer_label_columns)])
     #     df = process_numeric_columns(df, [col for col in group if
@@ -120,7 +122,8 @@ def run_inference_both_models(df_datapoint, size, regression_model, dt, should_o
     else:
         regression_ranking = regression_result
     # run decision tree inference
-    decision_tree_ranking = decision_tree.run_inference(dt, size, decision_tree_data[0], static_labels, should_order_rank)
+    decision_tree_ranking = decision_tree.run_inference(dt, size, decision_tree_data[0], static_labels,
+                                                        should_order_rank)
     target_labels = target_labels[0]
     return regression_ranking, decision_tree_ranking.tolist(), target_labels
 
@@ -128,10 +131,12 @@ def run_inference_both_models(df_datapoint, size, regression_model, dt, should_o
 def get_cache_path(size):
     return f"oof_predictions_cache_size_{size}.pkl"
 
+
 def save_to_cache(size, oof_predictions):
     cache_path = get_cache_path(size)
     with open(cache_path, 'wb') as f:
         pickle.dump(oof_predictions, f)
+
 
 def load_from_cache(size):
     cache_path = get_cache_path(size)
@@ -144,8 +149,10 @@ def load_from_cache(size):
 def get_test_split(size):
     df = decision_tree.get_df()
     df_of_size = decision_tree.partition_by_size(df, size)
-    _, test_datapoints, _, test_targets = train_test_split(df_of_size, np.ones([len(df_of_size)]), test_size=0.3, random_state=42069)
+    _, test_datapoints, _, test_targets = train_test_split(df_of_size, np.ones([len(df_of_size)]), test_size=0.3,
+                                                           random_state=42069)
     return test_datapoints, test_targets
+
 
 def get_dataset_with_oof_predictions(size, ranking=True):
     # Check if OOF predictions are already cached
@@ -159,7 +166,8 @@ def get_dataset_with_oof_predictions(size, ranking=True):
     # If not cached, calculate OOF predictions
     df = decision_tree.get_df()
     df_of_size = decision_tree.partition_by_size(df, size)
-    training_datapoints, _, _, _ = train_test_split(df_of_size, np.ones([len(df_of_size)]), test_size=0.3, random_state=42069)
+    training_datapoints, _, _, _ = train_test_split(df_of_size, np.ones([len(df_of_size)]), test_size=0.3,
+                                                    random_state=42069)
     kf = KFold(n_splits=5, shuffle=True, random_state=42069)
 
     oof_predictions = [None] * len(training_datapoints)
@@ -168,8 +176,8 @@ def get_dataset_with_oof_predictions(size, ranking=True):
         datapoints_train, datapoints_val = training_datapoints.iloc[train_index], training_datapoints.iloc[val_index]
         # vectorize training data
         X_train, train_targets, static_labels_train = decision_tree.vectorize_result_df(datapoints_train, size)
-        dt_fold_model = decision_tree.get_trained_d_i_on_dataset(size, X_train, train_targets, static_labels_train)\
-        # process one at a time since inference can only accept one
+        dt_fold_model = decision_tree.get_trained_d_i_on_dataset(size, X_train, train_targets, static_labels_train) \
+            # process one at a time since inference can only accept one
         for idx in val_index:
             X_val, _, static_labels_val = decision_tree.vectorize_result_df(training_datapoints.iloc[[idx]], size)
             val_prediction = decision_tree.run_inference(dt_fold_model, size, X_val[0], static_labels_val, ranking)
@@ -180,7 +188,6 @@ def get_dataset_with_oof_predictions(size, ranking=True):
     print("OOF predictions saved to cache.")
     print(oof_predictions)
     return df_of_size, oof_predictions
-
 
 
 def generate_disagrement_graph_stats(dt_predictions, regression_predictions, nn_predictions, ensemble_predictions):
@@ -210,6 +217,7 @@ def generate_disagrement_graph_stats(dt_predictions, regression_predictions, nn_
     plt.tight_layout()
     plt.savefig('disagreement_matrix_fixed.png')
     plt.show()
+
 
 def get_nn_inference_stats(targets, dt_predictions, regression_predictions, nn_predictions, display_full_stats=True):
     # convert both to numpy array
@@ -247,6 +255,7 @@ def get_nn_inference_stats(targets, dt_predictions, regression_predictions, nn_p
         decision_tree.report_stats(nn_predictions, targets)
     return mean_fraction_correct
 
+
 def get_inference_stats(targets, dt_predictions, regression_predictions, alpha, beta):
     ensemble_predictions = alpha * dt_predictions + beta * regression_predictions
     ensemble_ranks = np.zeros_like(ensemble_predictions, dtype=int)
@@ -258,7 +267,7 @@ def get_inference_stats(targets, dt_predictions, regression_predictions, alpha, 
         ensemble_ranks[i, :] = rankdata(ensemble_predictions[i, :], method='ordinal')
         dt_rank = (np.argsort(np.argsort(dt_predictions[i, :])) + 1).tolist()
 
-        # Rank regression predictions
+        # ranking the regression predictions
         reg_rank = (np.argsort(np.argsort(regression_predictions[i, :])) + 1).tolist()
         # print(f'ensemble: {ensemble_ranks[i, :]}')
         # print(f'targets: {targets[i]}')
@@ -280,11 +289,11 @@ def get_inference_stats(targets, dt_predictions, regression_predictions, alpha, 
     print('Stats For Ensemble')
     decision_tree.report_stats(ensemble_ranks.tolist(), targets)
 
-    # Compute the average exact match rate
     return mean_fraction_correct, ensemble_ranks
 
 
-def get_weights(race_size, train_oof_preds, train_reg_preds, train_targets, lr, l1, l2, num_iterations=500, grad_clip_threshold=1):
+def get_weights(race_size, train_oof_preds, train_reg_preds, train_targets, lr, l1, l2, num_iterations=500,
+                grad_clip_threshold=1):
     alpha = np.random.rand(race_size)
     beta = np.random.rand(race_size)
     alpha, beta = gd.gradient_descent(alpha, beta, train_oof_preds, train_reg_preds, train_targets,
@@ -302,6 +311,7 @@ def get_minmax_normalized_data(a, b):
 
     return a, b
 
+
 def get_minmax_normalized_data_singular(a):
     min_val = a.min()
     max_val = a.max()
@@ -312,7 +322,7 @@ def get_minmax_normalized_data_singular(a):
 
 
 def get_predictions(datapoints, size, regression_model, dt_model, ranking=False):
-    # Generate non-OOF predictions and collect targets
+
     regression_predictions = []
     targets = []
     dt_predictions = []
@@ -324,17 +334,17 @@ def get_predictions(datapoints, size, regression_model, dt_model, ranking=False)
         dt_predictions.append(tree)
     return targets, regression_predictions, dt_predictions
 
+
 def hinge_rank_loss(predictions, targets, margin=0.1):
-    # Calculate differences in predictions
+
     pred_diff = predictions.unsqueeze(1) - predictions.unsqueeze(2)  # [batch_size, n, n]
-    # Calculate differences between targets
+
     target_diff = targets.unsqueeze(1) - targets.unsqueeze(2)  # [batch_size, n, n]
 
-    # Apply hinge loss: max(0, margin - pred_diff * target_diff)
-    loss = torch.clamp(margin - pred_diff * target_diff, min=0)
+    loss = torch.clamp(margin - pred_diff * target_diff, min=0)  # @ li need hinge loss?
 
-    # Return mean loss
     return loss.mean()
+
 
 class MetaLearnerNN(nn.Module):
     def __init__(self, input_size, num_neurons, dropout_rate):
@@ -357,8 +367,8 @@ class MetaLearnerNN(nn.Module):
         return ranks.cpu().numpy().tolist()
 
 
-def run_inference_nn(size, inputs, learning_rate, num_neurons, dropout_rate, regression_model, decision_tree_model, num_epochs=100):
-    # Prepare data
+def run_inference_nn(size, inputs, learning_rate, num_neurons, dropout_rate, regression_model, decision_tree_model,
+                     num_epochs=100):
     datapoints, oof_predictions = get_dataset_with_oof_predictions(size, False)
     training_targets, regression_predictions, dt_predictions = get_predictions(
         datapoints, size, regression_model, decision_tree_model, True
@@ -367,31 +377,28 @@ def run_inference_nn(size, inputs, learning_rate, num_neurons, dropout_rate, reg
     regression_predictions = get_minmax_normalized_data_singular(np.array(regression_predictions))
     oof_predictions, dt_predictions = get_minmax_normalized_data(np.array(oof_predictions), np.array(dt_predictions))
 
-    # Convert lists to numpy arrays and PyTorch tensors
     regression_predictions = torch.tensor(np.array(regression_predictions), dtype=torch.float32)
     oof_predictions = torch.tensor(np.array(oof_predictions), dtype=torch.float32)
     dt_predictions = torch.tensor(np.array(dt_predictions), dtype=torch.float32)
     training_targets = torch.tensor(np.array(training_targets), dtype=torch.float32)
 
-    # First split: 70% training, 30% test
+    # first split: 70% training, 30% test
     train_reg_preds, test_reg_preds, train_dt_preds, test_dt_preds, train_targets, test_targets = train_test_split(
         regression_predictions, dt_predictions, training_targets, test_size=0.3, random_state=42069
     )
 
-    # Second split: 80% training, 20% validation
+    # cecond split: 80% training, 20% validation
     train_reg_preds, val_reg_preds, train_dt_preds, val_dt_preds, train_targets, val_targets, train_oof_preds, val_oof_preds = train_test_split(
         train_reg_preds, train_dt_preds, train_targets, oof_predictions, test_size=0.2, random_state=42069
     )
 
-    # Combine inputs
+    # ==================== combing inputs now ===========================
     train_inputs = torch.cat((train_oof_preds, train_reg_preds), dim=1)
     val_inputs = torch.cat((val_oof_preds, val_reg_preds), dim=1)
 
-    # Initialize model
     model = MetaLearnerNN(input_size=train_inputs.shape[1], num_neurons=num_neurons, dropout_rate=dropout_rate)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    # Training loop
     for epoch in range(num_epochs):
         model.train()
         optimizer.zero_grad()
@@ -401,7 +408,6 @@ def run_inference_nn(size, inputs, learning_rate, num_neurons, dropout_rate, reg
         loss.backward()
         optimizer.step()
 
-    # Validation
     model.eval()
     with torch.no_grad():
         val_predictions = model(val_inputs)
@@ -422,44 +428,35 @@ def train_ensemble(size, learning_rates, l1s, l2s, plot):
     # Get data points and OOF predictions
     datapoints, oof_predictions = get_dataset_with_oof_predictions(size, False)
 
-    # Get all predictions
-    training_targets, regression_predictions, dt_predictions = get_predictions(datapoints, size, regression_model, dt_model)
+    training_targets, regression_predictions, dt_predictions = get_predictions(datapoints, size, regression_model,
+                                                                               dt_model)
 
-    # Convert lists to numpy arrays for easier manipulation
     regression_predictions = np.array(regression_predictions)
     oof_predictions = np.array(oof_predictions)
     dt_predictions = np.array(dt_predictions)
     training_targets = np.array(training_targets)
 
-    # Normalize predictions on the same scale
     regression_predictions = softmax(regression_predictions, axis=1)
     oof_predictions = softmax(oof_predictions, axis=1)
     dt_predictions = softmax(dt_predictions, axis=1)
 
-
-    # First split: 70% training, 30% test (only on regression predictions, dt predictions, and targets)
     (train_reg_preds, test_reg_preds,
      train_dt_preds, test_dt_preds,
      train_targets, test_targets) = train_test_split(regression_predictions, dt_predictions, training_targets,
                                                      test_size=0.3, random_state=42069)
 
-    # At this point, train_oof_preds is associated with the training set
+    # train_oof_preds is associated with the training set
     train_oof_preds = oof_predictions
 
-    # Second split: 80% training, 20% validation (on the training data from the first split)
+    # second split: 80% training, 20% validation (on the training data from the first split)
     (train_reg_preds, val_reg_preds,
      train_dt_preds, val_dt_preds,
      train_targets, val_targets,
      train_oof_preds, val_oof_preds) = train_test_split(train_reg_preds, train_dt_preds, train_targets,
                                                         train_oof_preds, test_size=0.2, random_state=42069)
 
-    # At thi
-    # Initialize weights and hyperparameters
-
-    # Store the hyperparameters and their corresponding costs
     hyperparameter_combinations = []
     costs = []
-
 
     alpha = np.random.rand(size) * 0.01
     beta = np.random.rand(size) * 0.01
@@ -478,11 +475,9 @@ def train_ensemble(size, learning_rates, l1s, l2s, plot):
                 cost_history.append(val_cost)
                 print(val_cost)
 
-                # Store the hyperparameters and their cost
                 hyperparameter_combinations.append((lr, l1, l2))
                 costs.append(val_cost)
 
-                # Check if this is the best model
                 if val_cost < best_cost:
                     best_cost = val_cost
                     best_alpha = np.copy(alpha)
@@ -494,14 +489,11 @@ def train_ensemble(size, learning_rates, l1s, l2s, plot):
         print('Best Validation Cost:', best_cost)
         print(f"Weights: {alpha} {beta}")
 
-        # Convert the list of hyperparameter combinations and costs to a numpy array
         hyperparameters = np.array(hyperparameter_combinations)
         costs = np.array(costs)
 
-        # Reshape the costs array to match the grid of hyperparameters
         cost_matrix = costs.reshape((len(learning_rates), len(l1s), len(l2s)))
 
-        # Create heatmaps for each value of l2
         for i, l2_val in enumerate(l2s):
             plt.figure(figsize=(8, 6))
             sns.heatmap(cost_matrix[:, :, i], annot=True, fmt=".4f", cmap='viridis',
@@ -520,23 +512,25 @@ def train_ensemble(size, learning_rates, l1s, l2s, plot):
     test_targets, test_reg_pred, test_dt_pred = get_predictions(test_datapoints, size, regression_model, dt_model)
     # get inference stats for test set
     print('TEST SET')
-    _, ensemble_ranks = get_inference_stats(np.array(test_targets), np.array(test_dt_pred), np.array(test_reg_pred), alpha, beta)
-
+    _, ensemble_ranks = get_inference_stats(np.array(test_targets), np.array(test_dt_pred), np.array(test_reg_pred),
+                                            alpha, beta)
 
     # generate comparison matrix
     # get NN output
-    nn_preds = run_inference_nn(7, torch.cat([torch.tensor(np.array(test_dt_pred), dtype=torch.float32), torch.tensor(np.array(test_reg_pred), dtype=torch.float32)], dim=1), 0.0008, 6, 0.05, regression_model, dt_model, 100)
+    nn_preds = run_inference_nn(7, torch.cat([torch.tensor(np.array(test_dt_pred), dtype=torch.float32),
+                                              torch.tensor(np.array(test_reg_pred), dtype=torch.float32)], dim=1),
+                                0.0008, 6, 0.05, regression_model, dt_model, 100)
     generate_disagrement_graph_stats(test_dt_pred, test_reg_preds, nn_preds, ensemble_ranks)
     # print(f'Ensemble Validation Score: {validation_score}')
     # print(f'Ensemble Weights: {alpha} {beta}')
+
 
 def run_validation_test(size):
     df = decision_tree.get_df()
     df_of_size = decision_tree.partition_by_size(df, size)
 
-    # Split into train and test sets
     _, test_set, _, _ = decision_tree.train_test_split(df_of_size, np.ones(len(df_of_size)), test_size=0.2,
-                                                                                    random_state=42069)
+                                                       random_state=42069)
     N = 0
     tree_tot = 0
     reg_tot = 0
@@ -553,10 +547,6 @@ def run_validation_test(size):
         print(f'reg: {reg_result}')
     print(f'avg tree {tree_tot / N}')
     print(f'avg reg {reg_tot / N}')
-
-
-
-
 
 
 # def train_meta_learner(size, learning_rate=0.001, num_epochs=100):
@@ -662,9 +652,8 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
-
-
-def train_and_evaluate(size, learning_rate, num_neurons, dropout_rate, regression_model, decision_tree_model, num_epochs=100):
+def train_and_evaluate(size, learning_rate, num_neurons, dropout_rate, regression_model, decision_tree_model,
+                       num_epochs=100):
     # Prepare data
     datapoints, oof_predictions = get_dataset_with_oof_predictions(size, False)
     training_targets, regression_predictions, dt_predictions = get_predictions(
@@ -690,16 +679,13 @@ def train_and_evaluate(size, learning_rate, num_neurons, dropout_rate, regressio
         train_reg_preds, train_dt_preds, train_targets, oof_predictions, test_size=0.2, random_state=42069
     )
 
-    # Combine inputs
     train_inputs = torch.cat((train_oof_preds, train_reg_preds), dim=1)
     val_inputs = torch.cat((val_oof_preds, val_reg_preds), dim=1)
     test_inputs = torch.cat((test_dt_preds, test_reg_preds), dim=1)
 
-    # Initialize model
     model = MetaLearnerNN(input_size=train_inputs.shape[1], num_neurons=num_neurons, dropout_rate=dropout_rate)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    # Training loop
     for epoch in range(num_epochs):
         model.train()
         optimizer.zero_grad()
@@ -709,21 +695,21 @@ def train_and_evaluate(size, learning_rate, num_neurons, dropout_rate, regressio
         loss.backward()
         optimizer.step()
 
-    # Validation
     model.eval()
     with torch.no_grad():
         val_predictions = model(val_inputs)
         val_loss = hinge_rank_loss(val_predictions, val_targets)
 
-    # Calculate validation score
     nn_ranks = model.predict_ranks(val_inputs)
     validation_score = get_nn_inference_stats(val_targets.cpu().numpy().tolist(), val_oof_preds, val_reg_preds,
                                               nn_ranks, True)
     # report test
     nn_ranks_test = model.predict_ranks(test_inputs)
     print('TEST RESULTS')
-    test_score = get_nn_inference_stats(test_targets.cpu().numpy().tolist(), test_dt_preds, test_reg_preds, nn_ranks_test, True)
+    test_score = get_nn_inference_stats(test_targets.cpu().numpy().tolist(), test_dt_preds, test_reg_preds,
+                                        nn_ranks_test, True)
     return validation_score
+
 
 def nn__param_search():
     learning_rates = [0.0008]
@@ -735,7 +721,7 @@ def nn__param_search():
     r = regression.get_regression_model()
     dt = decision_tree.get_d_i(7)
 
-    # Grid search with refined configurations
+    # refined the configs from before
     for lr, neurons, dropout in itertools.product(learning_rates, num_neurons_list, dropout_rates):
         print(f"Testing configuration: learning_rate={lr}, num_neurons={neurons}, dropout_rate={dropout}")
         score = train_and_evaluate(size=7, learning_rate=lr, num_neurons=neurons, dropout_rate=dropout,
@@ -751,5 +737,5 @@ def nn__param_search():
 
 
 if __name__ == '__main__':
-    set_seed(42069) # for reproduction purposes
+    set_seed(42069)  # for reproduction purposes
     print(train_ensemble(7, [0.01], [0.01], [0.001], True))
