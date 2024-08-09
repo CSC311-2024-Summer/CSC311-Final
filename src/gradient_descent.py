@@ -105,7 +105,10 @@ def gradient_checking(alpha, beta, s, r, t, lambda_1, lambda_2, epsilon=1e-5):
     return alpha_diff, beta_diff
 
 
-def gradient_descent(alpha, beta, s, r, t, learning_rate, lambda_1, lambda_2, grad_clip_threshold, num_iterations):
+def gradient_descent(alpha, beta, s, r, t, learning_rate, lambda_1, lambda_2, grad_clip_threshold, num_iterations,
+                     convergence_threshold=1e-2):
+    prev_cost = float('inf')
+
     for iteration in range(num_iterations):
         grad_alpha, grad_beta = compute_gradients(alpha, beta, s, r, t, lambda_1, lambda_2)
 
@@ -118,13 +121,21 @@ def gradient_descent(alpha, beta, s, r, t, learning_rate, lambda_1, lambda_2, gr
         beta -= learning_rate * grad_beta
 
         cost = compute_cost(alpha, beta, s, r, t, lambda_1, lambda_2)
-        if iteration % 10 == 0:
-            print(f"Iteration {iteration}: Cost = {cost}")
-            gradient_checking(alpha, beta, s, r, t, lambda_1, lambda_2)
+
+        # Check for convergence
+        if abs(prev_cost - cost) < convergence_threshold:
+            print(f"converged it: {iteration}: Cost = {cost}")
+            break
+
+        prev_cost = cost
+
+        if iteration % 1000 == 0:
+            pass
+            # pass
+            # print(f"Iteration {iteration}: Cost = {cost}")
+            # gradient_checking(alpha, beta, s, r, t, lambda_1, lambda_2)
 
     return alpha, beta
-
-
 def get_s(d_bar):
     return np.exp(-d_bar)
 

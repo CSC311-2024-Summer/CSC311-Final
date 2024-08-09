@@ -20,8 +20,25 @@ from sklearn.metrics import accuracy_score
 random.seed(42069)
 
 
+# contants
+# define columns
+static_label_columns = ['weather', 'surface', 'track_condition']
+static_numeric_columns = ['distance', 'run_up_distance']
+racer_label_columns = ['meds', 'equip', 'sex']
+date_columns = ['race_date']
+racer_numerical_columns = ['jockey_key', 'trainer_key', 'weight', 'post_position', 'dollar_odds', 'age']
+target_column = 'official_finish'
+
+
+def get_df():
+    df = pd.read_csv('../data/output_results_new.csv', dtype=str)
+    df['num_of_racers'] = df['num_of_racers'].astype(int)
+    return df
+
 def partition_by_size(df, size):
     return df[df['num_of_racers'] == size].copy()
+
+
 
 def single_column_to_label(df, column):
     encoder = LabelEncoder()
@@ -112,18 +129,10 @@ def make_permutations(data_points, targets, k):
                 perm_indices.append(perm)
     return augmented_data_points, augmented_targets, perm_indices
 
+
+
 def vectorize_result_df(df, size):
-    set_display_options()
 
-    # Define columns
-    static_label_columns = ['weather', 'surface', 'track_condition']
-    static_numeric_columns = ['distance', 'run_up_distance']
-    racer_label_columns = ['meds', 'equip']
-    date_columns = ['race_date']
-    racer_numerical_columns = ['jockey_key', 'trainer_key', 'weight', 'post_position', 'dollar_odds', 'age']
-    target_column = 'official_finish'
-
-    # Build grouped racer columns
     grouped_racer_columns = build_racer_columns(racer_label_columns, racer_numerical_columns, size)
 
     # Process static columns
@@ -134,10 +143,11 @@ def vectorize_result_df(df, size):
     # Process racer-specific columns
     for group in grouped_racer_columns:
         df = process_label_columns(df, [col for col in group if any(label in col for label in racer_label_columns)])
-        df = process_numeric_columns(df, [col for col in group if any(numeric in col for numeric in racer_numerical_columns)])
+        df = process_numeric_columns(df, [col for col in group if
+                                          any(numeric in col for numeric in racer_numerical_columns)])
     df = process_numeric_columns(df, [f"racer_{i}_{target_column}" for i in range(size)])
 
-    # Combine columns into matrices
+
     def combine_columns_into_matrices(df, grouped_racer_columns, target_column, size):
         data_points = []
         targets = []
@@ -176,7 +186,17 @@ def flatten_datapoint(matrix, static_labels):
 
     return flattened_datapoint
 
+
 def calculate_rank_accuracy(y_true, y_pred):
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+
+    # Ensure y_true and y_pred are 2-dimensional arrays
+    if y_true.ndim == 1:
+        y_true = y_true.reshape(1, -1)
+    if y_pred.ndim == 1:
+        y_pred = y_pred.reshape(1, -1)
+
     # Calculate the accuracy for each data point based on how many ranks match
     matches = np.sum(y_true == y_pred, axis=1)
     accuracy = matches / y_true.shape[1]
@@ -190,13 +210,19 @@ def handle_permutations(datapoints, targets, static_labels, k):
     return X, y, perm_indices
 
 
-def calculate_average_ranks(y_pred_augmented, perm_indices, num_samples, num_permutations, num_features):
+
+
+
+def calculate_average_ranks(y_pred_augmented, perm_indices, num_samples, num_permutations, num_features, order_ranking=True):
     y_pred_augmented = y_pred_augmented.reshape(num_samples, num_permutations, num_features)
     ranks_augmented = np.zeros_like(y_pred_augmented, dtype=int)
 
     for j in range(y_pred_augmented.shape[0]):
         for p in range(y_pred_augmented.shape[1]):
-            ranks_augmented[j, p, :] = np.argsort(np.argsort(y_pred_augmented[j, p, :])) + 1
+            if order_ranking:
+                ranks_augmented[j, p, :] = np.argsort(np.argsort(y_pred_augmented[j, p, :])) + 1
+    if not order_ranking:
+        ranks_augmented = y_pred_augmented
     avg_ranks = np.zeros((num_samples, num_features))
     for j in range(num_samples):
         for f in range(num_features):
@@ -205,17 +231,23 @@ def calculate_average_ranks(y_pred_augmented, perm_indices, num_samples, num_per
                 perm = perm_indices[j * num_permutations + p]
                 original_position = perm.index(f)
                 rank_sum += ranks_augmented[j, p, original_position]
-            avg_ranks[j, f] = int(np.round(rank_sum / num_permutations))
-    final_ranks = np.zeros((num_samples, num_features), dtype=int)
-    # handle ties
-    for j in range(num_samples):
-        final_ranks[j, :] = rankdata(avg_ranks[j, :], method='ordinal')
+            if order_ranking:
+                avg_ranks[j, f] = int(np.round(rank_sum / num_permutations))
+            else:
+                avg_ranks[j, f] = rank_sum / num_permutations
+    if order_ranking:
+        final_ranks = np.zeros((num_samples, num_features), dtype=int)
+        # handle ties
+        for j in range(num_samples):
+            final_ranks[j, :] = rankdata(avg_ranks[j, :], method='ordinal')
 
-    return final_ranks
+        return final_ranks
+    return avg_ranks
 
 
 BEST_DIS = {
-    6: {'colsample_bytree': 1.0, 'learning_rate': 0.01, 'max_depth': 3, 'n_estimators': 100, 'reg_alpha': 0.01, 'reg_lambda': 0, 'subsample': 1.0}
+    6: {'colsample_bytree': 1.0, 'learning_rate': 0.01, 'max_depth': 3, 'n_estimators': 70, 'reg_alpha': 0.01, 'reg_lambda': 2, 'subsample': 1.0},
+    7: {'colsample_bytree': 0.8, 'learning_rate': 0.05, 'max_depth': 5, 'n_estimators': 50, 'reg_alpha': 1, 'reg_lambda': 0.1, 'subsample': 1.0}
 }
 
 def get_training_split(df_of_size, i):
@@ -231,27 +263,26 @@ def get_training_split(df_of_size, i):
 
 
 
-def run_inference(d, i, X, static_features):
+def run_inference(d, i, X, static_features, rank_order=True):
     k = k_func(i)
     single_datapoint = np.expand_dims(X, axis=0)
     targets_dummy = np.array([np.zeros(i)])  # dummy targets, not required for inference
     X_permutated, _, perm_indices = handle_permutations(single_datapoint, targets_dummy, static_features, k)
     y_pred = d.predict(X_permutated)
-    avg_ranks = calculate_average_ranks(y_pred, perm_indices, 1, k, y_pred.shape[1])[0]
+    avg_ranks = calculate_average_ranks(y_pred, perm_indices, 1, k, y_pred.shape[1], rank_order)[0]
     return avg_ranks
 
-
-def get_d_i(df, i: int):
+def get_d_i(i: int):
+    df = get_df()
     if i in BEST_DIS:
         df_of_size = partition_by_size(df, i)
         k = k_func(i)
-        print(f'Num Permutations {k}', flush=True)
 
         datapoints, targets, static_labels = vectorize_result_df(df_of_size, i)
 
         # Split into train and test sets
         datapoints_train, datapoints_test, targets_train, targets_test = train_test_split(datapoints, targets,
-                                                                                          test_size=0.2,
+                                                                                          test_size=0.3,
                                                                                           random_state=42069)
 
         # Combine train and validation sets for final training
@@ -263,9 +294,20 @@ def get_d_i(df, i: int):
         multi_target_xgb.fit(X_train, y_train)
 
         return multi_target_xgb
+def get_vectorized_df_of_size(df, size: int):
+    df_of_size = partition_by_size(df, size)
+    return vectorize_result_df(df_of_size, size)
 
 
-def train_d_i(df, i: int):
+def get_trained_d_i_on_dataset(i: int, datapoints, targets, static_labels):
+    k = k_func(i)
+    X_train, y_train, _ = handle_permutations(datapoints, targets, static_labels, k)
+    xgb = XGBRegressor(**BEST_DIS[i], n_jobs=-1)
+    multi_target_xgb = MultiOutputRegressor(xgb)
+    multi_target_xgb.fit(X_train, y_train)
+    return multi_target_xgb
+def train_d_i(i: int):
+    df = get_df()
     df_of_size = partition_by_size(df, i)
     k = k_func(i)
     print(f'Num Permutations {k}', flush=True)
@@ -273,7 +315,7 @@ def train_d_i(df, i: int):
     datapoints, targets, static_labels = vectorize_result_df(df_of_size, i)
 
     # Split into train and validation sets
-    datapoints_train, datapoints_test, targets_train, targets_test = train_test_split(datapoints, targets, test_size=0.2,
+    datapoints_train, datapoints_test, targets_train, targets_test = train_test_split(datapoints, targets, test_size=0.3,
                                                                                     random_state=42069)
 
     kf = KFold(n_splits=5, shuffle=True, random_state=42069)
@@ -281,7 +323,7 @@ def train_d_i(df, i: int):
     param_grid = {
         'n_estimators': [30, 50, 75, 100],
         'max_depth': [3, 5, 7],
-        'learning_rate': [0.01, 0.1, 0.2],
+        'learning_rate': [0.01, 0.05, 0.1, 0.2],
         'subsample': [0.8, 1.0],
         'colsample_bytree': [0.8, 1.0],
         'reg_alpha': [0, 0.01, 0.1, 0.5, 1, 2],
@@ -338,10 +380,10 @@ def test_inference(df):
     df_of_size = partition_by_size(df, i)
     datapoints, targets, static_labels = vectorize_result_df(df_of_size, i)
     datapoints_train, datapoints_test, targets_train, targets_test = train_test_split(datapoints, targets,
-                                                                                          test_size=0.2,
+                                                                                          test_size=0.3,
                                                                                           random_state=42069)
 
-    d = get_d_i(df, i)
+    d = get_d_i(i)
     # test first datapoint
     X = datapoints_train[0]
     train_Y = targets_train[0]
@@ -349,18 +391,8 @@ def test_inference(df):
     print(f' model inference: {run_inference(d, i, X, static_labels)}')
     print(f' actual: {train_Y}')
 
-
-def run_training_stats_six(df):
-    # Test decision tree for size 6
-    i = 6
-    # Get partitioned dataset of size i
-    df_of_size = partition_by_size(df, i)
-    datapoints, targets, static_labels = vectorize_result_df(df_of_size, i)
-    datapoints_train, _, targets_train, _ = train_test_split(datapoints, targets, test_size=0.2, random_state=42069)
-
-    d = get_d_i(df, i)
-    # Record stats for metrics
-    N = len(datapoints_train)
+def report_stats(actual_results, predicted_results):
+    N = len(actual_results)
 
     predict_1st_place = 0
     predict_one_in_top_3 = 0
@@ -369,15 +401,7 @@ def run_training_stats_six(df):
     predict_at_least_1 = 0
     avg_correct = 0
 
-    for j in range(N):
-        X = datapoints_train[j]
-        actual_Y = targets_train[j]
-        predicted_Y = run_inference(d, i, X, static_labels)
-
-        # Convert to list if not already
-        actual_Y = list(actual_Y)
-        predicted_Y = list(predicted_Y)
-
+    for actual_Y, predicted_Y in zip(actual_results, predicted_results):
         # Check if predicted 1st place is correct
         if 1 in predicted_Y and 1 in actual_Y:
             if predicted_Y.index(1) == actual_Y.index(1):
@@ -394,8 +418,6 @@ def run_training_stats_six(df):
             predict_one_in_top_3 += 1
 
         if all(top_3_matches):
-            # print(f'actual: {actual_Y}')
-            # print(f'predicted: {predicted_Y}')
             predict_entire_top_3 += 1
 
         # Check if the entire ranking is correct
@@ -414,14 +436,44 @@ def run_training_stats_six(df):
     print(f'Predict all %: {predict_all / N * 100:.2f}%')
     print(f'Predict at least 1 %: {predict_at_least_1 / N * 100:.2f}%')
 
+def run_training_stats(df, size):
+    i = size
+    # Get partitioned dataset of size i
+    df_of_size = partition_by_size(df, i)
+    datapoints, targets, static_labels = vectorize_result_df(df_of_size, i)
+    datapoints_train, _, targets_train, _ = train_test_split(datapoints, targets, test_size=0.3, random_state=42069)
+
+    d = get_d_i(i)
+    # Record stats for metrics
+    N = len(datapoints_train)
+
+    actual_results = []
+    predicted_results = []
+
+    for j in range(N):
+        X = datapoints_train[j]
+        actual_Y = targets_train[j]
+        predicted_Y = run_inference(d, i, X, static_labels)
+
+        # Convert to list if not already
+        actual_Y = list(actual_Y)
+        predicted_Y = list(predicted_Y)
+
+        actual_results.append(actual_Y)
+        predicted_results.append(predicted_Y)
+
+    # Call the generalized function for stats reporting
+    report_stats(actual_results, predicted_results)
+
 if __name__ == '__main__':
     # RACE_SIZES = [6, 7, 8, 9, 10]
     RACE_SIZES = [6, 7, 8, 9, 10]
     # read in the dataframe
-    df = pd.read_csv('../data/output_results.csv', dtype=str)
-    df['num_of_racers'] = df['num_of_racers'].astype(int)
     #
+    train_normal_d_i(7)
+    # run_training_stats(get_df(), 7)
+
+    # train_d_i(6)
     # test_inference(df)
-    run_training_stats_six(df)
    #  for size in RACE_SIZES:
    #      train_d_i(df, size)
